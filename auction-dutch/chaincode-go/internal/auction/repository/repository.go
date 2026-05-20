@@ -13,6 +13,8 @@ type AuctionRepository interface {
 
 	GetTxID(ctx contractapi.TransactionContextInterface) string
 	CreateBidKey(ctx contractapi.TransactionContextInterface, auctionID string, txID string) (string, error)
+
 	SavePrivateBid(ctx contractapi.TransactionContextInterface, collection string, bidKey string, bidJSON []byte) error
 	GetPrivateBidHash(ctx contractapi.TransactionContextInterface, collection string, bidKey string) ([]byte, error)
+	GetPrivateBid(ctx contractapi.TransactionContextInterface, collection string, bidKey string) (*domain.FullBid, error)
 }

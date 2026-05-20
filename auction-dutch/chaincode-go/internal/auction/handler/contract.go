@@ -142,3 +142,41 @@ func (c *Contract) RevealBid(
 		clientMSPID,
 	)
 }
+
+func (c *Contract) CloseAuction(
+	ctx contractapi.TransactionContextInterface,
+	auctionID string,
+) error {
+	clientID, err := getSubmittingClientIdentity(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get client identity: %w", err)
+	}
+
+	return c.auctionService.CloseAuction(
+		ctx,
+		auctionID,
+		clientID,
+	)
+}
+
+func (c *Contract) EndAuction(
+	ctx contractapi.TransactionContextInterface,
+	auctionID string,
+) error {
+	clientID, err := getSubmittingClientIdentity(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get client identity: %w", err)
+	}
+
+	peerMSPID, err := shim.GetMSPID()
+	if err != nil {
+		return fmt.Errorf("failed to get peer MSP ID: %w", err)
+	}
+
+	return c.auctionService.EndAuction(
+		ctx,
+		auctionID,
+		clientID,
+		peerMSPID,
+	)
+}

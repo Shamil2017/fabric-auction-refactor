@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/hyperledger/fabric-contract-api-go/v2/contractapi"
@@ -248,6 +249,151 @@ func (s *AuctionService) RevealBid(
 
 	if err := s.repo.SaveAuction(ctx, auctionID, auction); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func (s *AuctionService) CloseAuction(
+	ctx contractapi.TransactionContextInterface,
+	auctionID string,
+	clientID string,
+) error {
+	if strings.TrimSpace(auctionID) == "" {
+		return errors.New("auctionID is required")
+	}
+
+	auction, err := s.repo.GetAuction(ctx, auctionID)
+	if err != nil {
+		return err
+	}
+
+	if auction.Seller != clientID {
+		return errors.New("auction can only be closed by seller")
+	}
+
+	if auction.Status != domain.StatusOpen {
+		return errors.New("cannot close auction that is not open")
+	}
+
+	auction.Status = domain.StatusClosed
+
+	if err := s.repo.SaveAuction(ctx, auctionID, auction); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *AuctionService) EndAuction(
+	ctx contractapi.TransactionContextInterface,
+	auctionID string,
+	clientID string,
+	peerMSPID string,
+) error {
+	if strings.TrimSpace(auctionID) == "" {
+		return errors.New("auctionID is required")
+	}
+
+	auction, err := s.repo.GetAuction(ctx, auctionID)
+	if err != nil {
+		return err
+	}
+
+	if auction.Seller != clientID {
+		return errors.New("auction can only be ended by seller")
+	}
+
+	if auction.Status != domain.StatusClosed {
+		return errors.New("can only end a closed auction")
+	}
+
+	if len(auction.RevealedBids) == 0 {
+		return errors.New("no bids have been revealed, cannot end auction")
+	}
+
+	bidders := make([]domain.FullBid, 0, len(auction.RevealedBids))
+	for _, bid := range auction.RevealedBids {
+		bidders = append(bidders, bid)
+	}
+
+	sort.Slice(bidders, func(i, j int) bool {
+		if bidders[i].Price > bidders[j].Price {
+			return true
+		}
+
+		if bidders[i].Price < bidders[j].Price {
+			return false
+		}
+
+		return bidders[i].Quantity < bidders[j].Quantity
+	})
+
+	auction.Winners = []domain.Winner{}
+	remainingQuantity := auction.Quantity
+
+	for i := 0; remainingQuantity > 0 && i < len(bidders); i++ {
+		winnerQuantity := bidders[i].Quantity
+
+		if winnerQuantity > remainingQuantity {
+			winnerQuantity = remainingQuantity
+		}
+
+		auction.Winners = append(auction.Winners, domain.Winner{
+			Buyer:    bidders[i].Buyer,
+			Quantity: winnerQuantity,
+		})
+
+		auction.Price = bidders[i].Price
+		remainingQuantity -= winnerQuantity
+	}
+
+	if err := s.checkForHigherBid(ctx, auction.Price, auction.RevealedBids, auction.PrivateBids, peerMSPID); err != nil {
+		return fmt.Errorf("cannot end auction: %w", err)
+	}
+
+	auction.Status = domain.StatusEnded
+
+	if err := s.repo.SaveAuction(ctx, auctionID, auction); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *AuctionService) checkForHigherBid(
+	ctx contractapi.TransactionContextInterface,
+	auctionPrice int,
+	revealedBids map[string]domain.FullBid,
+	privateBids map[string]domain.BidHash,
+	peerMSPID string,
+) error {
+	for bidKey, privateBid := range privateBids {
+		if _, alreadyRevealed := revealedBids[bidKey]; alreadyRevealed {
+			continue
+		}
+
+		collection := "_implicit_org_" + privateBid.Org
+
+		if privateBid.Org == peerMSPID {
+			bid, err := s.repo.GetPrivateBid(ctx, collection, bidKey)
+			if err != nil {
+				return err
+			}
+
+			if bid.Price > auctionPrice {
+				return errors.New("unrevealed bid has a higher price")
+			}
+		} else {
+			hash, err := s.repo.GetPrivateBidHash(ctx, collection, bidKey)
+			if err != nil {
+				return err
+			}
+
+			if hash == nil {
+				return fmt.Errorf("bid hash does not exist: %s", bidKey)
+			}
+		}
 	}
 
 	return nil

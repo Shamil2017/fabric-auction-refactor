@@ -100,6 +100,28 @@ func (r *FabricRepository) GetPrivateBidHash(
 	return hash, nil
 }
 
+func (r *FabricRepository) GetPrivateBid(
+	ctx contractapi.TransactionContextInterface,
+	collection string,
+	bidKey string,
+) (*domain.FullBid, error) {
+	bidJSON, err := ctx.GetStub().GetPrivateData(collection, bidKey)
+	if err != nil {
+		return nil, fmt.Errorf("get private bid: %w", err)
+	}
+
+	if bidJSON == nil {
+		return nil, fmt.Errorf("bid %s does not exist", bidKey)
+	}
+
+	var bid domain.FullBid
+	if err := json.Unmarshal(bidJSON, &bid); err != nil {
+		return nil, fmt.Errorf("unmarshal private bid: %w", err)
+	}
+
+	return &bid, nil
+}
+
 func (r *FabricRepository) SetAuctionEndorsement(
 	ctx contractapi.TransactionContextInterface,
 	auctionID string,
