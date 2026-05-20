@@ -8,16 +8,23 @@ import (
 	"log"
 
 	"github.com/hyperledger/fabric-contract-api-go/v2/contractapi"
-	auction "github.com/hyperledger/fabric-samples/auction/dutch-auction/chaincode-go/smart-contract"
+
+	"github.com/hyperledger/fabric-samples/auction/dutch-auction/chaincode-go/internal/auction/handler"
+	"github.com/hyperledger/fabric-samples/auction/dutch-auction/chaincode-go/internal/auction/repository"
+	"github.com/hyperledger/fabric-samples/auction/dutch-auction/chaincode-go/internal/auction/service"
 )
 
 func main() {
-	auctionSmartContract, err := contractapi.NewChaincode(&auction.SmartContract{})
+	auctionRepository := repository.NewFabricRepository()
+	auctionService := service.NewAuctionService(auctionRepository)
+	auctionContract := handler.NewContract(auctionService)
+
+	auctionChaincode, err := contractapi.NewChaincode(auctionContract)
 	if err != nil {
 		log.Panicf("Error creating auction chaincode: %v", err)
 	}
 
-	if err := auctionSmartContract.Start(); err != nil {
+	if err := auctionChaincode.Start(); err != nil {
 		log.Panicf("Error starting auction chaincode: %v", err)
 	}
 }
