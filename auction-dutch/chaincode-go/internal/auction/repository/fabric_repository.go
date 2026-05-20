@@ -87,6 +87,19 @@ func (r *FabricRepository) SavePrivateBid(
 	return nil
 }
 
+func (r *FabricRepository) GetPrivateBidHash(
+	ctx contractapi.TransactionContextInterface,
+	collection string,
+	bidKey string,
+) ([]byte, error) {
+	hash, err := ctx.GetStub().GetPrivateDataHash(collection, bidKey)
+	if err != nil {
+		return nil, fmt.Errorf("get private bid hash: %w", err)
+	}
+
+	return hash, nil
+}
+
 func (r *FabricRepository) SetAuctionEndorsement(
 	ctx contractapi.TransactionContextInterface,
 	auctionID string,

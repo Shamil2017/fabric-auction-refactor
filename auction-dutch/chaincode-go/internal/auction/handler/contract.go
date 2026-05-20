@@ -89,3 +89,21 @@ func (c *Contract) Bid(
 		peerMSPID,
 	)
 }
+
+func (c *Contract) SubmitBid(
+	ctx contractapi.TransactionContextInterface,
+	auctionID string,
+	txID string,
+) error {
+	clientMSPID, err := ctx.GetClientIdentity().GetMSPID()
+	if err != nil {
+		return fmt.Errorf("failed to get client MSP ID: %w", err)
+	}
+
+	return c.auctionService.SubmitBid(
+		ctx,
+		auctionID,
+		txID,
+		clientMSPID,
+	)
+}

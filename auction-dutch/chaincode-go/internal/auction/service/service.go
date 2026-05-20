@@ -100,3 +100,72 @@ func (s *AuctionService) Bid(
 
 	return txID, nil
 }
+
+func (s *AuctionService) SubmitBid(
+	ctx contractapi.TransactionContextInterface,
+	auctionID string,
+	txID string,
+	clientMSPID string,
+) error {
+	if strings.TrimSpace(auctionID) == "" {
+		return errors.New("auctionID is required")
+	}
+
+	if strings.TrimSpace(txID) == "" {
+		return errors.New("txID is required")
+	}
+
+	auction, err := s.repo.GetAuction(ctx, auctionID)
+	if err != nil {
+		return err
+	}
+
+	if auction.Status != domain.StatusOpen {
+		return errors.New("cannot join closed or ended auction")
+	}
+
+	collection := "_implicit_org_" + clientMSPID
+
+	bidKey, err := s.repo.CreateBidKey(ctx, auctionID, txID)
+	if err != nil {
+		return err
+	}
+
+	bidHash, err := s.repo.GetPrivateBidHash(ctx, collection, bidKey)
+	if err != nil {
+		return err
+	}
+
+	if bidHash == nil {
+		return fmt.Errorf("bid hash does not exist: %s", bidKey)
+	}
+
+	auction.PrivateBids[bidKey] = domain.BidHash{
+		Org:  clientMSPID,
+		Hash: fmt.Sprintf("%x", bidHash),
+	}
+
+	if !containsString(auction.Orgs, clientMSPID) {
+		auction.Orgs = append(auction.Orgs, clientMSPID)
+
+		if err := s.repo.SetAuctionEndorsement(ctx, auctionID, auction.Orgs, auction.Auditor); err != nil {
+			return err
+		}
+	}
+
+	if err := s.repo.SaveAuction(ctx, auctionID, auction); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func containsString(items []string, value string) bool {
+	for _, item := range items {
+		if item == value {
+			return true
+		}
+	}
+
+	return false
+}
