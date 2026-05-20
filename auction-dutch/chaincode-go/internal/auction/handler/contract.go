@@ -107,3 +107,38 @@ func (c *Contract) SubmitBid(
 		clientMSPID,
 	)
 }
+
+func (c *Contract) RevealBid(
+	ctx contractapi.TransactionContextInterface,
+	auctionID string,
+	txID string,
+) error {
+	transientMap, err := ctx.GetStub().GetTransient()
+	if err != nil {
+		return fmt.Errorf("get transient data: %w", err)
+	}
+
+	bidJSON, ok := transientMap["bid"]
+	if !ok {
+		return errors.New("bid key not found in transient map")
+	}
+
+	clientID, err := getSubmittingClientIdentity(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get client identity: %w", err)
+	}
+
+	clientMSPID, err := ctx.GetClientIdentity().GetMSPID()
+	if err != nil {
+		return fmt.Errorf("failed to get client MSP ID: %w", err)
+	}
+
+	return c.auctionService.RevealBid(
+		ctx,
+		auctionID,
+		txID,
+		bidJSON,
+		clientID,
+		clientMSPID,
+	)
+}

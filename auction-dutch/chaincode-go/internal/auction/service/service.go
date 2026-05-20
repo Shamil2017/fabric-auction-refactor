@@ -1,6 +1,9 @@
 package service
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -151,6 +154,96 @@ func (s *AuctionService) SubmitBid(
 		if err := s.repo.SetAuctionEndorsement(ctx, auctionID, auction.Orgs, auction.Auditor); err != nil {
 			return err
 		}
+	}
+
+	if err := s.repo.SaveAuction(ctx, auctionID, auction); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *AuctionService) RevealBid(
+	ctx contractapi.TransactionContextInterface,
+	auctionID string,
+	txID string,
+	bidJSON []byte,
+	clientID string,
+	clientMSPID string,
+) error {
+	if strings.TrimSpace(auctionID) == "" {
+		return errors.New("auctionID is required")
+	}
+
+	if strings.TrimSpace(txID) == "" {
+		return errors.New("txID is required")
+	}
+
+	if len(bidJSON) == 0 {
+		return errors.New("bid is required")
+	}
+
+	collection := "_implicit_org_" + clientMSPID
+
+	bidKey, err := s.repo.CreateBidKey(ctx, auctionID, txID)
+	if err != nil {
+		return err
+	}
+
+	privateBidHash, err := s.repo.GetPrivateBidHash(ctx, collection, bidKey)
+	if err != nil {
+		return err
+	}
+
+	if privateBidHash == nil {
+		return fmt.Errorf("bid hash does not exist: %s", bidKey)
+	}
+
+	auction, err := s.repo.GetAuction(ctx, auctionID)
+	if err != nil {
+		return err
+	}
+
+	if auction.Status != domain.StatusClosed {
+		return errors.New("cannot reveal bid for open or ended auction")
+	}
+
+	calculatedHash := sha256.Sum256(bidJSON)
+
+	if !bytes.Equal(calculatedHash[:], privateBidHash) {
+		return fmt.Errorf("revealed bid hash does not match private bid hash")
+	}
+
+	publicBidHash, ok := auction.PrivateBids[bidKey]
+	if !ok {
+		return fmt.Errorf("bid hash was not submitted to auction: %s", bidKey)
+	}
+
+	if publicBidHash.Hash != fmt.Sprintf("%x", privateBidHash) {
+		return errors.New("private bid hash does not match public auction hash")
+	}
+
+	var bidInput struct {
+		Quantity int    `json:"quantity"`
+		Price    int    `json:"price"`
+		Org      string `json:"org"`
+		Buyer    string `json:"buyer"`
+	}
+
+	if err := json.Unmarshal(bidJSON, &bidInput); err != nil {
+		return fmt.Errorf("unmarshal bid: %w", err)
+	}
+
+	if bidInput.Buyer != clientID {
+		return fmt.Errorf("permission denied, client is not the owner of the bid")
+	}
+
+	auction.RevealedBids[bidKey] = domain.FullBid{
+		Type:     domain.BidKeyType,
+		Quantity: bidInput.Quantity,
+		Price:    bidInput.Price,
+		Org:      bidInput.Org,
+		Buyer:    bidInput.Buyer,
 	}
 
 	if err := s.repo.SaveAuction(ctx, auctionID, auction); err != nil {
