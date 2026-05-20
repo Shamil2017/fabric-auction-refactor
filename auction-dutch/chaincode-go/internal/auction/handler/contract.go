@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"errors"
 	"fmt"
 
+	"github.com/hyperledger/fabric-chaincode-go/v2/shim"
 	"github.com/hyperledger/fabric-contract-api-go/v2/contractapi"
 
 	"github.com/hyperledger/fabric-samples/auction/dutch-auction/chaincode-go/internal/auction/domain"
@@ -52,5 +54,38 @@ func (c *Contract) CreateAuction(
 		withAuditor,
 		clientID,
 		clientOrgID,
+	)
+}
+
+func (c *Contract) Bid(
+	ctx contractapi.TransactionContextInterface,
+	auctionID string,
+) (string, error) {
+	transientMap, err := ctx.GetStub().GetTransient()
+	if err != nil {
+		return "", fmt.Errorf("get transient data: %w", err)
+	}
+
+	bidJSON, ok := transientMap["bid"]
+	if !ok {
+		return "", errors.New("bid key not found in transient map")
+	}
+
+	clientMSPID, err := ctx.GetClientIdentity().GetMSPID()
+	if err != nil {
+		return "", fmt.Errorf("failed to get client MSP ID: %w", err)
+	}
+
+	peerMSPID, err := shim.GetMSPID()
+	if err != nil {
+		return "", fmt.Errorf("failed to get peer MSP ID: %w", err)
+	}
+
+	return c.auctionService.Bid(
+		ctx,
+		auctionID,
+		bidJSON,
+		clientMSPID,
+		peerMSPID,
 	)
 }

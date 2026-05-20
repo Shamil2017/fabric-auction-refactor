@@ -10,4 +10,8 @@ type AuctionRepository interface {
 	GetAuction(ctx contractapi.TransactionContextInterface, auctionID string) (*domain.Auction, error)
 	SaveAuction(ctx contractapi.TransactionContextInterface, auctionID string, auction *domain.Auction) error
 	SetAuctionEndorsement(ctx contractapi.TransactionContextInterface, auctionID string, mspids []string, auditor bool) error
+
+	GetTxID(ctx contractapi.TransactionContextInterface) string
+	CreateBidKey(ctx contractapi.TransactionContextInterface, auctionID string, txID string) (string, error)
+	SavePrivateBid(ctx contractapi.TransactionContextInterface, collection string, bidKey string, bidJSON []byte) error
 }

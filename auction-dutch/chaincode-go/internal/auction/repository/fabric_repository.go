@@ -57,6 +57,36 @@ func (r *FabricRepository) SaveAuction(
 	return nil
 }
 
+func (r *FabricRepository) GetTxID(ctx contractapi.TransactionContextInterface) string {
+	return ctx.GetStub().GetTxID()
+}
+
+func (r *FabricRepository) CreateBidKey(
+	ctx contractapi.TransactionContextInterface,
+	auctionID string,
+	txID string,
+) (string, error) {
+	bidKey, err := ctx.GetStub().CreateCompositeKey(domain.BidKeyType, []string{auctionID, txID})
+	if err != nil {
+		return "", fmt.Errorf("create bid composite key: %w", err)
+	}
+
+	return bidKey, nil
+}
+
+func (r *FabricRepository) SavePrivateBid(
+	ctx contractapi.TransactionContextInterface,
+	collection string,
+	bidKey string,
+	bidJSON []byte,
+) error {
+	if err := ctx.GetStub().PutPrivateData(collection, bidKey, bidJSON); err != nil {
+		return fmt.Errorf("save private bid: %w", err)
+	}
+
+	return nil
+}
+
 func (r *FabricRepository) SetAuctionEndorsement(
 	ctx contractapi.TransactionContextInterface,
 	auctionID string,

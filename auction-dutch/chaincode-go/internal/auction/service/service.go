@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/hyperledger/fabric-contract-api-go/v2/contractapi"
@@ -59,4 +60,43 @@ func (s *AuctionService) CreateAuction(
 	}
 
 	return nil
+}
+
+func (s *AuctionService) Bid(
+	ctx contractapi.TransactionContextInterface,
+	auctionID string,
+	bidJSON []byte,
+	clientMSPID string,
+	peerMSPID string,
+) (string, error) {
+	if strings.TrimSpace(auctionID) == "" {
+		return "", errors.New("auctionID is required")
+	}
+
+	if len(bidJSON) == 0 {
+		return "", errors.New("bid is required")
+	}
+
+	if clientMSPID != peerMSPID {
+		return "", fmt.Errorf(
+			"client from org %s is not authorized to write private data on peer from org %s",
+			clientMSPID,
+			peerMSPID,
+		)
+	}
+
+	collection := "_implicit_org_" + clientMSPID
+
+	txID := s.repo.GetTxID(ctx)
+
+	bidKey, err := s.repo.CreateBidKey(ctx, auctionID, txID)
+	if err != nil {
+		return "", err
+	}
+
+	if err := s.repo.SavePrivateBid(ctx, collection, bidKey, bidJSON); err != nil {
+		return "", err
+	}
+
+	return txID, nil
 }
